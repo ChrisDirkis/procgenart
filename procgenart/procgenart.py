@@ -5,10 +5,12 @@ import random
 import tweepy
 import dotenv
 
+import datetime
+
 import scrolling.scrolling
 
 generators = [
-    { "generate": scrolling.scrolling.generate, "weight": 1, "suffix": "png" },
+    { "generate": scrolling.scrolling.generate, "weight": 1, "suffix": "webp" },
 ]
 
 # We don't use this in our code, but this is what we used to get the access token that we're pulling from .env
@@ -59,18 +61,26 @@ def main():
 
     # Pick a generator and generate into a (hopefully virtual) file
     file = tempfile.SpooledTemporaryFile(max_size=50 * 1024 * 1024, mode="wb+")
-    seed = random.random()
+    seed = random.randint(0, 0xFFFFFFFFE)
 
     generator = weighted_select(generators)
     generator["generate"](file, seed)
+    filename = f"{seed}.{generator['suffix']}"
     
     file.seek(0)
 
 
-    # Upload to Twitter
-    media = api.media_upload(f"{seed}.{generator['suffix']}", file=file)
-    api.update_status(f"{seed}.{generator['suffix']}", media_ids=[media.media_id])
+    # Write file to disk if we're in dry mode
+    if os.environ.get("DRY") == "True":
+        with open("dry/" + datetime.datetime.now().isoformat() + filename, "wb+") as out_file:
+            out_file.write(file.read())
+        return
 
+    # Upload to Twitter
+    media = api.media_upload(filename, file=file)
+    print(media)
+    status_response = api.update_status(filename, media_ids=[media.media_id])
+    print(status_response)
 
 if __name__ == "__main__":
     main()
